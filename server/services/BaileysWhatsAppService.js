@@ -30,13 +30,23 @@ class BaileysWhatsAppService {
       // Initialize authentication state
       const { state, saveCreds } = await useMultiFileAuthState(this.authDir);
 
-      // Create socket connection
+      // Create socket connection with proper logger
       this.sock = makeWASocket({
         auth: state,
-        printQRInTerminal: true,
         logger: {
-          level: 'error', // Only log errors to reduce noise
-          child: () => ({ level: 'error' })
+          level: 'error',
+          child: () => ({
+            level: 'error',
+            debug: () => {},
+            info: () => {},
+            warn: () => {},
+            error: (...args) => {
+              if (process.env.BAILEYS_LOG_LEVEL !== 'silent') {
+                console.error('[Baileys]', ...args);
+              }
+            },
+            fatal: (...args) => console.error('[Baileys Fatal]', ...args)
+          })
         }
       });
 

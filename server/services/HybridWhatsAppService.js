@@ -1,5 +1,6 @@
 import WhatsAppService from './WhatsAppService.js';
 import BaileysWhatsAppService from './BaileysWhatsAppService.js';
+import MinimalWhatsAppService from './MinimalWhatsAppService.js';
 
 class HybridWhatsAppService {
   constructor(io) {
@@ -107,36 +108,16 @@ class HybridWhatsAppService {
   setupMinimalService() {
     console.log('🔧 Setting up minimal service as last resort...');
     
-    // Create a minimal service that at least responds to API calls
-    this.currentService = {
-      isReady: () => false,
-      getQRCode: () => null,
-      sendMessage: async () => { throw new Error('WhatsApp service is not available'); },
-      generateQR: async () => { throw new Error('WhatsApp service is not available'); },
-      getClientInfo: async () => ({ 
-        status: 'failed', 
-        error: 'All WhatsApp services failed to initialize',
-        serviceType: 'minimal'
-      }),
-      checkConnection: async () => ({ 
-        connected: false, 
-        error: 'All services failed',
-        serviceType: 'minimal'
-      }),
-      forceRestart: async () => {
-        // Try to reinitialize from scratch
-        this.initializationAttempts = 0;
-        this.serviceType = null;
-        this.currentService = null;
-        setTimeout(() => this.initialize(), 5000);
-        return { message: 'Attempting full restart...' };
-      }
-    };
-    
+    // Use the proper minimal service
+    this.currentService = new MinimalWhatsAppService(this.io);
     this.serviceType = 'minimal';
     
+    // Initialize it
+    this.currentService.initialize();
+    
     this.io.emit('whatsapp-service-minimal', {
-      message: 'Running in minimal mode - WhatsApp functionality unavailable',
+      message: 'Running in minimal mode - WhatsApp functionality limited',
+      recommendation: 'Consider switching to DigitalOcean VPS for full functionality',
       timestamp: new Date().toISOString()
     });
   }

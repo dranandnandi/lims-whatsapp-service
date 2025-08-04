@@ -10,5 +10,5 @@
   "RETRY_DELAY": "5000",
   "WHATSAPP_TIMEOUT": "60000",
   "ENABLE_BAILEYS_FALLBACK": "true",
-  "BAILEYS_LOG_LEVEL": "error"
+  "BAILEYS_LOG_LEVEL": "silent"
 }
