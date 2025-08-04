@@ -6,10 +6,10 @@
   "type": "module",
   "scripts": {
     "start": "node server/index.js",
+    "build": "echo 'No build step required for server-only app'",
     "dev": "concurrently \"npm run server\" \"npm run client\"",
     "server": "node server/index.js",
     "client": "vite",
-    "build": "vite build",
     "dev:full": "concurrently \"npm run server\" \"npm run dev\""
   },
   "dependencies": {
