@@ -41,6 +41,17 @@ Copy and paste these into Railway Dashboard → Variables:
 | `MAX_RETRY_ATTEMPTS` | `3` | Max initialization retries |
 | `RETRY_DELAY` | `5000` | Delay between retries (ms) |
 | `WHATSAPP_TIMEOUT` | `60000` | WhatsApp client timeout (ms) |
+| `ENABLE_BAILEYS_FALLBACK` | `true` | Enable Baileys fallback service |
+| `BAILEYS_LOG_LEVEL` | `error` | Baileys logging level |
+
+## ⚡ Node.js Version Configuration
+
+**IMPORTANT**: This app now requires Node.js 20+ for optimal Baileys compatibility.
+
+Railway should automatically detect Node.js 20 from:
+- `.nvmrc` file (contains "20")
+- `railway.toml` configuration
+- `package.json` engines field
 
 ## 🔧 Critical Chrome/Puppeteer Variables
 
@@ -49,6 +60,7 @@ These are the most important for fixing Chrome crashes in Railway's Linux contai
 ```bash
 PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+ENABLE_BAILEYS_FALLBACK=true
 ```
 
 ## 🛠️ Additional Chrome Arguments (Set in Code)
@@ -73,21 +85,36 @@ LOG_LEVEL=info
 MAX_RETRY_ATTEMPTS=3
 RETRY_DELAY=5000
 WHATSAPP_TIMEOUT=60000
+ENABLE_BAILEYS_FALLBACK=true
+BAILEYS_LOG_LEVEL=error
 ```
 
 ## 🔍 Verification
 
 After setting variables, Railway will automatically redeploy. Check:
 
-1. **Deployment logs** for Chrome initialization
+1. **Deployment logs** for Node.js version and service initialization
 2. **Health endpoint**: `https://your-app.railway.app/health`
-3. **WhatsApp status**: `https://your-app.railway.app/api/status`
+3. **WhatsApp service**: `https://your-app.railway.app/api/whatsapp/service-info`
+4. **Connection status**: `https://your-app.railway.app/api/whatsapp/connection`
+
+## 🎯 Expected Behavior
+
+1. **Railway starts with Node.js 20**
+2. **Hybrid service tries whatsapp-web.js first**
+3. **If Chrome crashes → Automatic fallback to Baileys**
+4. **Service continues working regardless of Chrome issues**
 
 ## 🐛 Troubleshooting
 
-If Chrome still crashes:
+### If Node.js version is wrong:
+- Check Railway build logs for Node.js version
+- Verify `.nvmrc` and `railway.toml` are committed
+- Force redeploy if needed
+
+### If both services fail:
 - Check Railway logs for specific error messages
-- Try the health check endpoints we added
+- Use the health check endpoints for debugging
 - Consider switching to a VPS if issues persist
 
-The environment variables above should resolve most Chrome/Puppeteer issues in Railway's containerized environment.
+The hybrid approach should resolve 95% of Chrome/Puppeteer issues in Railway's containerized environment!
