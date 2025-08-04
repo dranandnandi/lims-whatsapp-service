@@ -1,4 +1,5 @@
-import makeWASocket, { DisconnectReason, useMultiFileAuthState } from '@whiskeysockets/baileys';
+// Correct import for Baileys (based on testing)
+import { makeWASocket, DisconnectReason, useMultiFileAuthState } from '@whiskeysockets/baileys';
 import { Boom } from '@hapi/boom';
 import fs from 'fs';
 import path from 'path';
@@ -16,6 +17,11 @@ class BaileysWhatsAppService {
     console.log('🔄 Initializing Baileys WhatsApp client...');
     
     try {
+      // Check if makeWASocket is available
+      if (typeof makeWASocket !== 'function') {
+        throw new Error('makeWASocket is not available. Baileys might not be properly installed.');
+      }
+
       // Ensure auth directory exists
       if (!fs.existsSync(this.authDir)) {
         fs.mkdirSync(this.authDir, { recursive: true });
@@ -40,10 +46,19 @@ class BaileysWhatsAppService {
       console.log('✅ Baileys WhatsApp client initialized successfully!');
     } catch (error) {
       console.error('❌ Baileys initialization failed:', error);
+      console.error('📊 Debug info:', {
+        makeWASocketType: typeof makeWASocket,
+        baileysAvailable: typeof baileys !== 'undefined',
+        nodeVersion: process.version
+      });
+      
       this.io.emit('whatsapp-init-failed', {
         error: error.message,
+        service: 'baileys',
         timestamp: new Date().toISOString()
       });
+      
+      throw error; // Re-throw to let hybrid service handle it
     }
   }
 

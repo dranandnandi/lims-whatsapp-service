@@ -43,8 +43,11 @@ class HybridWhatsAppService {
   setupFailureHandler() {
     // Listen for initialization failures from whatsapp-web.js
     const originalEmit = this.io.emit.bind(this.io);
+    let failureHandled = false; // Prevent multiple fallback attempts
+    
     this.io.emit = (event, data) => {
-      if (event === 'whatsapp-init-failed' && this.serviceType === 'whatsapp-web.js') {
+      if (event === 'whatsapp-init-failed' && this.serviceType === 'whatsapp-web.js' && !failureHandled) {
+        failureHandled = true;
         console.log('🔄 whatsapp-web.js failed, switching to Baileys...');
         this.fallbackToBaileys();
         return;
@@ -55,6 +58,12 @@ class HybridWhatsAppService {
 
   async fallbackToBaileys() {
     console.log('🔄 Falling back to Baileys WhatsApp service...');
+    
+    // Prevent multiple fallback attempts
+    if (this.serviceType === 'baileys') {
+      console.log('⚠️ Already using Baileys, skipping fallback');
+      return;
+    }
     
     // Clean up previous service
     if (this.currentService && typeof this.currentService.forceRestart === 'function') {
@@ -83,12 +92,53 @@ class HybridWhatsAppService {
       });
       
     } catch (error) {
-      console.error('❌ Both WhatsApp services failed:', error);
+      console.error('❌ Baileys also failed:', error);
       this.io.emit('whatsapp-init-failed', {
         error: 'Both whatsapp-web.js and Baileys failed to initialize',
+        details: error.message,
         timestamp: new Date().toISOString()
       });
+      
+      // Last resort: try a simple text-only service
+      this.setupMinimalService();
     }
+  }
+
+  setupMinimalService() {
+    console.log('🔧 Setting up minimal service as last resort...');
+    
+    // Create a minimal service that at least responds to API calls
+    this.currentService = {
+      isReady: () => false,
+      getQRCode: () => null,
+      sendMessage: async () => { throw new Error('WhatsApp service is not available'); },
+      generateQR: async () => { throw new Error('WhatsApp service is not available'); },
+      getClientInfo: async () => ({ 
+        status: 'failed', 
+        error: 'All WhatsApp services failed to initialize',
+        serviceType: 'minimal'
+      }),
+      checkConnection: async () => ({ 
+        connected: false, 
+        error: 'All services failed',
+        serviceType: 'minimal'
+      }),
+      forceRestart: async () => {
+        // Try to reinitialize from scratch
+        this.initializationAttempts = 0;
+        this.serviceType = null;
+        this.currentService = null;
+        setTimeout(() => this.initialize(), 5000);
+        return { message: 'Attempting full restart...' };
+      }
+    };
+    
+    this.serviceType = 'minimal';
+    
+    this.io.emit('whatsapp-service-minimal', {
+      message: 'Running in minimal mode - WhatsApp functionality unavailable',
+      timestamp: new Date().toISOString()
+    });
   }
 
   // Proxy all methods to current service
