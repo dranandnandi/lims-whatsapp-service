@@ -200,6 +200,34 @@ app.post('/api/generate-qr', async (req, res) => {
   }
 });
 
+// WhatsApp health and diagnostic endpoints
+app.get('/api/whatsapp/info', async (req, res) => {
+  try {
+    const info = await whatsappService.getClientInfo();
+    res.json(info);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/whatsapp/connection', async (req, res) => {
+  try {
+    const connection = await whatsappService.checkConnection();
+    res.json(connection);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/whatsapp/restart', async (req, res) => {
+  try {
+    const result = await whatsappService.forceRestart();
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Health check endpoint for Railway
 app.get('/health', (req, res) => {
   res.json({ 

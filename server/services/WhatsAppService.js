@@ -34,8 +34,20 @@ class WhatsAppService {
         '--disable-ipc-flooding-protection',
         '--disable-extensions',
         '--disable-default-apps',
-        '--disable-component-extensions-with-background-pages'
-      ]
+        '--disable-component-extensions-with-background-pages',
+        '--disable-web-security',
+        '--disable-features=VizDisplayCompositor',
+        '--no-default-browser-check',
+        '--disable-background-networking',
+        '--disable-sync',
+        '--metrics-recording-only',
+        '--disable-default-apps',
+        '--mute-audio',
+        '--no-pings',
+        '--disable-crash-reporter',
+        '--disable-logging'
+      ],
+      timeout: 60000
     };
 
     // Add executable path for Railway/Linux deployment
@@ -52,7 +64,97 @@ class WhatsAppService {
     });
 
     this.setupEventHandlers();
-    this.client.initialize();
+    
+    // Initialize with retry logic
+    this.initializeWithRetry();
+  }
+
+  async initializeWithRetry(maxRetries = 3, delay = 5000) {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`🔄 Attempt ${attempt}/${maxRetries} to initialize WhatsApp client...`);
+        await this.client.initialize();
+        console.log('✅ WhatsApp client initialized successfully!');
+        return;
+      } catch (error) {
+        console.error(`❌ Attempt ${attempt} failed:`, error.message);
+        
+        if (attempt < maxRetries) {
+          console.log(`⏳ Retrying in ${delay/1000} seconds...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          
+          // Recreate client for next attempt
+          this.recreateClient();
+        } else {
+          console.error('🚫 All retry attempts failed. WhatsApp client initialization failed.');
+          
+          // Emit failure event to frontend
+          this.io.emit('whatsapp-init-failed', {
+            error: 'Failed to initialize WhatsApp client after multiple attempts',
+            timestamp: new Date().toISOString()
+          });
+        }
+      }
+    }
+  }
+
+  recreateClient() {
+    if (this.client) {
+      try {
+        this.client.destroy();
+      } catch (e) {
+        console.log('Client destroy error (expected):', e.message);
+      }
+    }
+    
+    // Recreate with same config
+    const puppeteerConfig = {
+      headless: true,
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-accelerated-2d-canvas',
+        '--no-first-run',
+        '--no-zygote',
+        '--single-process',
+        '--disable-gpu',
+        '--disable-background-timer-throttling',
+        '--disable-backgrounding-occluded-windows',
+        '--disable-renderer-backgrounding',
+        '--disable-features=TranslateUI',
+        '--disable-ipc-flooding-protection',
+        '--disable-extensions',
+        '--disable-default-apps',
+        '--disable-component-extensions-with-background-pages',
+        '--disable-web-security',
+        '--disable-features=VizDisplayCompositor',
+        '--no-default-browser-check',
+        '--disable-background-networking',
+        '--disable-sync',
+        '--metrics-recording-only',
+        '--disable-default-apps',
+        '--mute-audio',
+        '--no-pings',
+        '--disable-crash-reporter',
+        '--disable-logging'
+      ],
+      timeout: 60000
+    };
+
+    if (process.env.NODE_ENV === 'production') {
+      puppeteerConfig.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium-browser';
+    }
+    
+    this.client = new Client({
+      authStrategy: new LocalAuth({
+        clientId: 'lims-whatsapp-bot',
+        dataPath: process.env.SESSION_PATH || './server/sessions'
+      }),
+      puppeteer: puppeteerConfig
+    });
+    
+    this.setupEventHandlers();
   }
 
   setupEventHandlers() {
@@ -83,6 +185,13 @@ class WhatsAppService {
     this.client.on('auth_failure', (msg) => {
       console.error('❌ Authentication failed:', msg);
       this.io.emit('whatsapp-auth-failure', { error: msg });
+      
+      // Auto-retry on auth failure
+      setTimeout(() => {
+        console.log('🔄 Retrying authentication after failure...');
+        this.recreateClient();
+        this.initializeWithRetry(2, 3000); // 2 retries with 3 second delay
+      }, 5000);
     });
 
     this.client.on('disconnected', (reason) => {
@@ -93,6 +202,14 @@ class WhatsAppService {
         reason,
         timestamp: new Date().toISOString()
       });
+      
+      // Auto-reconnect on unexpected disconnection (not logout)
+      if (reason !== 'LOGOUT' && reason !== 'NAVIGATION') {
+        setTimeout(() => {
+          console.log('🔄 Attempting to reconnect after disconnection...');
+          this.initializeWithRetry(2, 5000);
+        }, 10000);
+      }
     });
 
     this.client.on('message_create', (message) => {
@@ -207,6 +324,70 @@ class WhatsAppService {
 
   getQRCode() {
     return this.qrCodeData;
+  }
+
+  // Health checking methods for monitoring
+  async getClientInfo() {
+    if (!this.isClientReady) {
+      return { status: 'not_ready', error: 'Client not initialized' };
+    }
+
+    try {
+      const info = await this.client.info;
+      return {
+        status: 'ready',
+        pushname: info.pushname,
+        wid: info.wid._serialized,
+        platform: info.platform
+      };
+    } catch (error) {
+      return { status: 'error', error: error.message };
+    }
+  }
+
+  async checkConnection() {
+    try {
+      if (!this.client) {
+        return { connected: false, error: 'Client not initialized' };
+      }
+
+      const state = await this.client.getState();
+      return { 
+        connected: state === 'CONNECTED',
+        state: state,
+        timestamp: new Date().toISOString()
+      };
+    } catch (error) {
+      return { 
+        connected: false, 
+        error: error.message,
+        timestamp: new Date().toISOString()
+      };
+    }
+  }
+
+  // Force restart method for troubleshooting
+  async forceRestart() {
+    console.log('🔄 Force restarting WhatsApp client...');
+    
+    if (this.client) {
+      try {
+        await this.client.destroy();
+      } catch (e) {
+        console.log('Force destroy error (expected):', e.message);
+      }
+    }
+    
+    this.isClientReady = false;
+    this.qrCodeData = null;
+    
+    // Wait a bit before reinitializing
+    setTimeout(() => {
+      this.recreateClient();
+      this.initializeWithRetry(3, 5000);
+    }, 2000);
+    
+    return { message: 'Restart initiated' };
   }
 }
 
