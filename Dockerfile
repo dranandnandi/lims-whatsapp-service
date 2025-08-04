@@ -1,5 +1,5 @@
-# Use Node.js LTS version
-FROM node:18-alpine
+# Use Node.js 20 LTS version (required for Baileys)
+FROM node:20-alpine
 
 # Install dependencies for Puppeteer and Chrome
 RUN apk add --no-cache \
@@ -31,12 +31,12 @@ COPY . .
 # Create sessions directory
 RUN mkdir -p server/sessions
 
-# Expose port
-EXPOSE 3001
+# Expose port (Railway uses 8080)
+EXPOSE 8080
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:3001/health || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+  CMD curl -f http://localhost:8080/health || exit 1
 
 # Start the application
 CMD ["npm", "start"]
