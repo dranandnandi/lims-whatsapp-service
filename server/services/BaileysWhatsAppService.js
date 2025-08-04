@@ -1,4 +1,3 @@
-// Correct import for Baileys (based on testing)
 import { makeWASocket, DisconnectReason, useMultiFileAuthState } from '@whiskeysockets/baileys';
 import { Boom } from '@hapi/boom';
 import fs from 'fs';
@@ -30,7 +29,7 @@ class BaileysWhatsAppService {
       // Initialize authentication state
       const { state, saveCreds } = await useMultiFileAuthState(this.authDir);
 
-      // Create socket connection with proper logger
+      // Create socket connection with safe logger
       this.sock = makeWASocket({
         auth: state,
         logger: {
@@ -41,11 +40,16 @@ class BaileysWhatsAppService {
             info: () => {},
             warn: () => {},
             error: (...args) => {
+              // Only log if not silenced
               if (process.env.BAILEYS_LOG_LEVEL !== 'silent') {
                 console.error('[Baileys]', ...args);
               }
             },
-            fatal: (...args) => console.error('[Baileys Fatal]', ...args)
+            fatal: (...args) => {
+              if (process.env.BAILEYS_LOG_LEVEL !== 'silent') {
+                console.error('[Baileys Fatal]', ...args);
+              }
+            }
           })
         }
       });
@@ -58,7 +62,6 @@ class BaileysWhatsAppService {
       console.error('❌ Baileys initialization failed:', error);
       console.error('📊 Debug info:', {
         makeWASocketType: typeof makeWASocket,
-        baileysAvailable: typeof baileys !== 'undefined',
         nodeVersion: process.version
       });
       
@@ -73,169 +76,167 @@ class BaileysWhatsAppService {
   }
 
   setupEventHandlers(saveCreds) {
+    if (!this.sock) return;
+
+    // Handle credentials saving
+    this.sock.ev.on('creds.update', saveCreds);
+
+    // Handle connection updates with safe error handling
     this.sock.ev.on('connection.update', (update) => {
-      const { connection, lastDisconnect, qr } = update;
-
-      if (qr) {
-        console.log('📱 QR Code received');
-        this.qrCodeData = qr;
-        this.io.emit('qr-code', { qr });
-      }
-
-      if (connection === 'close') {
-        const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
-        console.log('🔌 Connection closed due to', lastDisconnect?.error, ', reconnecting:', shouldReconnect);
+      try {
+        const { connection, lastDisconnect, qr } = update;
         
-        this.isClientReady = false;
-        this.io.emit('whatsapp-status', {
-          isReady: false,
-          reason: lastDisconnect?.error?.message,
-          timestamp: new Date().toISOString()
-        });
-
-        if (shouldReconnect) {
-          setTimeout(() => {
-            this.initialize();
-          }, 5000);
+        if (qr) {
+          this.qrCode = qr;
+          console.log('📱 QR Code generated for Baileys');
+          this.io.emit('qr-code', { qr, service: 'baileys' });
         }
-      } else if (connection === 'open') {
-        console.log('✅ WhatsApp client is ready!');
-        this.isClientReady = true;
-        this.io.emit('whatsapp-status', {
-          isReady: true,
-          timestamp: new Date().toISOString()
-        });
+        
+        if (connection === 'close') {
+          console.log('🔌 Baileys connection closed');
+          this.isReady = false;
+          
+          // Check if we should reconnect
+          if (lastDisconnect && lastDisconnect.error) {
+            const statusCode = lastDisconnect.error.output?.statusCode;
+            const shouldReconnect = statusCode !== 401; // 401 = logged out
+            
+            console.log('🔄 Should reconnect:', shouldReconnect);
+            
+            if (shouldReconnect) {
+              setTimeout(() => {
+                console.log('🔄 Attempting to reconnect Baileys...');
+                this.initialize().catch(error => {
+                  console.error('❌ Baileys reconnection failed:', error.message);
+                });
+              }, 5000);
+            }
+          }
+        } else if (connection === 'open') {
+          console.log('✅ Baileys WhatsApp client connected successfully!');
+          this.isReady = true;
+          this.io.emit('whatsapp-ready', { service: 'baileys' });
+        }
+      } catch (error) {
+        console.error('❌ Error in Baileys connection handler:', error.message);
       }
     });
 
-    this.sock.ev.on('creds.update', saveCreds);
-
-    this.sock.ev.on('messages.upsert', (m) => {
-      const message = m.messages[0];
-      if (!message.key.fromMe) {
-        console.log('📨 Received message:', message.message?.conversation || 'Media message');
-        this.io.emit('message-received', {
-          from: message.key.remoteJid,
-          body: message.message?.conversation || '[Media]',
-          timestamp: new Date(message.messageTimestamp * 1000).toISOString()
+    // Handle incoming messages
+    this.sock.ev.on('messages.upsert', (messageUpdate) => {
+      try {
+        console.log('📨 Baileys received message update:', {
+          type: messageUpdate.type,
+          messageCount: messageUpdate.messages?.length || 0
         });
+        
+        if (messageUpdate.type === 'notify') {
+          messageUpdate.messages?.forEach(message => {
+            if (message.key.fromMe) return; // Skip own messages
+            
+            this.io.emit('message-received', {
+              service: 'baileys',
+              from: message.key.remoteJid,
+              message: message.message,
+              timestamp: new Date().toISOString()
+            });
+          });
+        }
+      } catch (error) {
+        console.error('❌ Error handling Baileys message:', error.message);
       }
     });
   }
 
-  async sendMessage(phoneNumber, message) {
-    if (!this.isClientReady || !this.sock) {
-      throw new Error('WhatsApp client is not ready');
+  async sendMessage(chatId, message) {
+    if (!this.isReady || !this.sock) {
+      throw new Error('Baileys WhatsApp client is not ready');
     }
 
     try {
-      const formattedNumber = this.formatPhoneNumber(phoneNumber);
+      const formattedNumber = phoneNumber.replace(/\D/g, '');
       const jid = `${formattedNumber}@s.whatsapp.net`;
       
       const result = await this.sock.sendMessage(jid, { text: message });
+      console.log('✅ Baileys message sent successfully');
       
-      console.log(`📤 Message sent to ${phoneNumber}: ${message.substring(0, 50)}...`);
-      
-      this.io.emit('message-update', {
-        id: result.key.id,
-        status: 'sent',
-        timestamp: new Date().toISOString()
-      });
-
       return result.key.id;
     } catch (error) {
-      console.error('Error sending message:', error);
-      throw new Error(`Failed to send message: ${error.message}`);
+      console.error('❌ Baileys send message failed:', error);
+      throw error;
     }
   }
 
-  formatPhoneNumber(phoneNumber) {
-    // Remove all non-digit characters
-    let cleaned = phoneNumber.replace(/\D/g, '');
-    
-    // Add country code if missing (assuming US/international format)
-    if (!cleaned.startsWith('1') && cleaned.length === 10) {
-      cleaned = '1' + cleaned;
+  async sendMessageWithAttachment(phoneNumber, message, filePath = null) {
+    if (!this.isReady || !this.sock) {
+      throw new Error('Baileys WhatsApp client is not ready');
     }
-    
-    return cleaned;
-  }
 
-  async generateQR() {
-    if (this.isClientReady) {
-      throw new Error('WhatsApp is already connected');
+    try {
+      const formattedNumber = phoneNumber.replace(/\D/g, '');
+      const jid = `${formattedNumber}@s.whatsapp.net`;
+      
+      let result;
+      
+      if (filePath && fs.existsSync(filePath)) {
+        // Send with attachment
+        const media = fs.readFileSync(filePath);
+        const mediaType = filePath.toLowerCase().endsWith('.pdf') ? 'document' : 'image';
+        
+        if (mediaType === 'document') {
+          result = await this.sock.sendMessage(jid, {
+            document: media,
+            fileName: path.basename(filePath),
+            caption: message
+          });
+        } else {
+          result = await this.sock.sendMessage(jid, {
+            image: media,
+            caption: message
+          });
+        }
+      } else {
+        // Send text only
+        result = await this.sock.sendMessage(jid, { text: message });
+      }
+      
+      console.log('✅ Baileys message with attachment sent successfully');
+      return result.key.id;
+      
+    } catch (error) {
+      console.error('❌ Baileys send message with attachment failed:', error);
+      throw error;
     }
-    
-    // Restart the client to generate a new QR code
-    if (this.sock) {
-      this.sock.end();
-    }
-    
-    this.initialize();
-  }
-
-  isReady() {
-    return this.isClientReady;
   }
 
   getQRCode() {
-    return this.qrCodeData;
+    return this.qrCode;
   }
 
-  async getClientInfo() {
-    if (!this.isClientReady || !this.sock) {
-      return { status: 'not_ready', error: 'Client not initialized' };
-    }
-
-    try {
-      const info = this.sock.user;
-      return {
-        status: 'ready',
-        name: info?.name,
-        id: info?.id,
-        platform: 'baileys'
-      };
-    } catch (error) {
-      return { status: 'error', error: error.message };
-    }
+  isClientReady() {
+    return this.isReady;
   }
 
-  async checkConnection() {
-    try {
-      if (!this.sock) {
-        return { connected: false, error: 'Client not initialized' };
-      }
-
-      return { 
-        connected: this.isClientReady,
-        state: this.isClientReady ? 'CONNECTED' : 'DISCONNECTED',
-        timestamp: new Date().toISOString()
-      };
-    } catch (error) {
-      return { 
-        connected: false, 
-        error: error.message,
-        timestamp: new Date().toISOString()
-      };
-    }
-  }
-
-  async forceRestart() {
-    console.log('🔄 Force restarting Baileys WhatsApp client...');
-    
+  async destroy() {
     if (this.sock) {
-      this.sock.end();
+      try {
+        await this.sock.logout();
+      } catch (error) {
+        console.log('Baileys logout error (expected):', error.message);
+      }
     }
-    
-    this.isClientReady = false;
-    this.qrCodeData = null;
-    
-    // Wait a bit before reinitializing
-    setTimeout(() => {
-      this.initialize();
-    }, 2000);
-    
-    return { message: 'Restart initiated' };
+    this.sock = null;
+    this.isReady = false;
+    this.qrCode = null;
+  }
+
+  getServiceInfo() {
+    return {
+      service: 'baileys',
+      ready: this.isReady,
+      hasQR: !!this.qrCode,
+      sessionPath: this.sessionPath
+    };
   }
 }
 
