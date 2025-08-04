@@ -15,24 +15,40 @@ class WhatsAppService {
   initialize() {
     console.log('🔄 Initializing WhatsApp client...');
     
+    // Production-optimized Puppeteer configuration for Railway
+    const puppeteerConfig = {
+      headless: true,
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-accelerated-2d-canvas',
+        '--no-first-run',
+        '--no-zygote',
+        '--single-process',
+        '--disable-gpu',
+        '--disable-background-timer-throttling',
+        '--disable-backgrounding-occluded-windows',
+        '--disable-renderer-backgrounding',
+        '--disable-features=TranslateUI',
+        '--disable-ipc-flooding-protection',
+        '--disable-extensions',
+        '--disable-default-apps',
+        '--disable-component-extensions-with-background-pages'
+      ]
+    };
+
+    // Add executable path for Railway/Linux deployment
+    if (process.env.NODE_ENV === 'production') {
+      puppeteerConfig.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium-browser';
+    }
+    
     this.client = new Client({
       authStrategy: new LocalAuth({
         clientId: 'lims-whatsapp-bot',
-        dataPath: './server/sessions'
+        dataPath: process.env.SESSION_PATH || './server/sessions'
       }),
-      puppeteer: {
-        headless: true,
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-accelerated-2d-canvas',
-          '--no-first-run',
-          '--no-zygote',
-          '--single-process',
-          '--disable-gpu'
-        ]
-      }
+      puppeteer: puppeteerConfig
     });
 
     this.setupEventHandlers();
