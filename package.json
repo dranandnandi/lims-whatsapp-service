@@ -12,9 +12,6 @@
     "build": "vite build",
     "dev:full": "concurrently \"npm run server\" \"npm run dev\""
   },
-  "engines": {
-    "node": "18.x"
-  },
   "dependencies": {
     "express": "^4.18.2",
     "cors": "^2.8.5",
