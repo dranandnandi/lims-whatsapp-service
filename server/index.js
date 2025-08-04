@@ -7,7 +7,7 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 import multer from 'multer';
 import { v4 as uuidv4 } from 'uuid'; // Add this import
-import WhatsAppService from './services/WhatsAppService.js';
+import HybridWhatsAppService from './services/HybridWhatsAppService.js';
 import MessageService from './services/MessageService.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -71,7 +71,7 @@ const upload = multer({
 });
 
 // Initialize services
-const whatsappService = new WhatsAppService(io);
+const whatsappService = new HybridWhatsAppService(io);
 const messageService = new MessageService();
 
 // Routes
@@ -205,6 +205,15 @@ app.get('/api/whatsapp/info', async (req, res) => {
   try {
     const info = await whatsappService.getClientInfo();
     res.json(info);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/whatsapp/service-info', (req, res) => {
+  try {
+    const serviceInfo = whatsappService.getServiceInfo();
+    res.json(serviceInfo);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

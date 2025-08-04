@@ -15,45 +15,8 @@ class WhatsAppService {
   initialize() {
     console.log('🔄 Initializing WhatsApp client...');
     
-    // Production-optimized Puppeteer configuration for Railway
-    const puppeteerConfig = {
-      headless: true,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-accelerated-2d-canvas',
-        '--no-first-run',
-        '--no-zygote',
-        '--single-process',
-        '--disable-gpu',
-        '--disable-background-timer-throttling',
-        '--disable-backgrounding-occluded-windows',
-        '--disable-renderer-backgrounding',
-        '--disable-features=TranslateUI',
-        '--disable-ipc-flooding-protection',
-        '--disable-extensions',
-        '--disable-default-apps',
-        '--disable-component-extensions-with-background-pages',
-        '--disable-web-security',
-        '--disable-features=VizDisplayCompositor',
-        '--no-default-browser-check',
-        '--disable-background-networking',
-        '--disable-sync',
-        '--metrics-recording-only',
-        '--disable-default-apps',
-        '--mute-audio',
-        '--no-pings',
-        '--disable-crash-reporter',
-        '--disable-logging'
-      ],
-      timeout: 60000
-    };
-
-    // Add executable path for Railway/Linux deployment
-    if (process.env.NODE_ENV === 'production') {
-      puppeteerConfig.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium-browser';
-    }
+    // Use the same enhanced config method
+    const puppeteerConfig = this.getPuppeteerConfig();
     
     this.client = new Client({
       authStrategy: new LocalAuth({
@@ -101,15 +64,39 @@ class WhatsAppService {
   recreateClient() {
     if (this.client) {
       try {
-        this.client.destroy();
+        // Check if browser exists before trying to close it
+        if (this.client.pupBrowser && typeof this.client.pupBrowser.close === 'function') {
+          this.client.destroy();
+        } else {
+          // Browser never initialized properly, just reset the client
+          console.log('⚠️ Browser was null, resetting client without destroy');
+          this.client = null;
+        }
       } catch (e) {
-        console.log('Client destroy error (expected):', e.message);
+        console.log('Client destroy error (expected in containerized env):', e.message);
+        this.client = null;
       }
     }
     
-    // Recreate with same config
-    const puppeteerConfig = {
+    // Recreate with enhanced config for Railway
+    const puppeteerConfig = this.getPuppeteerConfig();
+    
+    this.client = new Client({
+      authStrategy: new LocalAuth({
+        clientId: 'lims-whatsapp-bot',
+        dataPath: process.env.SESSION_PATH || './server/sessions'
+      }),
+      puppeteer: puppeteerConfig
+    });
+    
+    this.setupEventHandlers();
+  }
+
+  getPuppeteerConfig() {
+    const baseConfig = {
       headless: true,
+      timeout: 60000,
+      protocolTimeout: 30000,
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
@@ -133,28 +120,38 @@ class WhatsAppService {
         '--disable-background-networking',
         '--disable-sync',
         '--metrics-recording-only',
-        '--disable-default-apps',
         '--mute-audio',
         '--no-pings',
         '--disable-crash-reporter',
-        '--disable-logging'
-      ],
-      timeout: 60000
+        '--disable-logging',
+        '--disable-plugins',
+        '--disable-plugins-discovery',
+        '--disable-preconnect',
+        '--disable-translate',
+        '--disable-web-security',
+        '--reduce-security-for-testing',
+        '--allow-running-insecure-content',
+        '--disable-features=AudioServiceOutOfProcess'
+      ]
     };
 
+    // Railway/Production specific config
     if (process.env.NODE_ENV === 'production') {
-      puppeteerConfig.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium-browser';
+      baseConfig.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium-browser';
+      
+      // Try different executable paths as fallback
+      const possiblePaths = [
+        '/usr/bin/chromium-browser',
+        '/usr/bin/chromium',
+        '/usr/bin/google-chrome-stable',
+        '/usr/bin/google-chrome'
+      ];
+      
+      // Check if the configured path exists, otherwise try alternatives
+      baseConfig.executablePath = possiblePaths[0]; // Default to first option
     }
-    
-    this.client = new Client({
-      authStrategy: new LocalAuth({
-        clientId: 'lims-whatsapp-bot',
-        dataPath: process.env.SESSION_PATH || './server/sessions'
-      }),
-      puppeteer: puppeteerConfig
-    });
-    
-    this.setupEventHandlers();
+
+    return baseConfig;
   }
 
   setupEventHandlers() {
