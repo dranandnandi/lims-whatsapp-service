@@ -22,6 +22,12 @@ const io = new Server(server, {
   }
 });
 
+// Create sessions directory if it doesn't exist
+const sessionsDir = process.env.SESSION_PATH || join(__dirname, 'sessions');
+if (!fs.existsSync(sessionsDir)) {
+  fs.mkdirSync(sessionsDir, { recursive: true });
+}
+
 // CORS configuration for production
 app.use(cors({
   origin: process.env.CORS_ORIGIN || '*',
@@ -256,8 +262,9 @@ io.on('connection', (socket) => {
 // Initialize WhatsApp service
 whatsappService.initialize();
 
-// Start server - Use Railway's assigned PORT
+// Start server - Fixed PORT definition
 const PORT = process.env.PORT || 3001;
+
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 WhatsApp Service running on port ${PORT}`);
   console.log(`📱 Environment: ${process.env.NODE_ENV || 'development'}`);
