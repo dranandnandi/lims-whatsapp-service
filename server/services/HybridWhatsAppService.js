@@ -149,7 +149,17 @@ class HybridWhatsAppService {
     if (!this.currentService) {
       throw new Error('No WhatsApp service is ready');
     }
-    return await this.currentService.generateQR();
+    // Check if the service has the generateQR method and call it safely
+    if (typeof this.currentService.generateQR === 'function') {
+      try {
+        return await this.currentService.generateQR();
+      } catch (error) {
+        console.error('Error generating QR:', error);
+        throw new Error(`QR generation failed: ${error.message}`);
+      }
+    }
+    // Fallback: throw error if no generateQR method
+    throw new Error('Current service does not support QR generation');
   }
 
   isReady() {
