@@ -223,7 +223,45 @@ class BaileysWhatsAppService {
     return this.qrCode;
   }
 
-  isClientReady() {
+  async generateQR() {
+    try {
+      if (!this.sock && !this.isReady) {
+        console.log('🔄 Reinitializing Baileys to generate new QR...');
+        await this.initialize();
+        
+        // Wait a bit for QR generation
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        if (this.qrCode) {
+          console.log('✅ QR code generated successfully');
+          
+          // Emit QR to all connected clients
+          if (this.io) {
+            this.io.emit('qr-code', {
+              qr: this.qrCode,
+              service: 'baileys',
+              timestamp: new Date().toISOString()
+            });
+          }
+          
+          return { success: true, qr: this.qrCode };
+        }
+      }
+      
+      if (this.qrCode) {
+        console.log('✅ Existing QR code available');
+        return { success: true, qr: this.qrCode };
+      }
+      
+      throw new Error('No QR code available - service may already be authenticated');
+      
+    } catch (error) {
+      console.error('❌ QR generation failed:', error);
+      throw error;
+    }
+  }
+
+  isReady() {
     return this.isReady;
   }
 
