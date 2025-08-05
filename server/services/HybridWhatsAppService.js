@@ -156,7 +156,17 @@ class HybridWhatsAppService {
     if (!this.currentService) {
       return false;
     }
-    return this.currentService.isReady();
+    // Check if the service has the isReady method and call it safely
+    if (typeof this.currentService.isReady === 'function') {
+      try {
+        return this.currentService.isReady();
+      } catch (error) {
+        console.error('Error checking service readiness:', error);
+        return false;
+      }
+    }
+    // Fallback: assume not ready if no isReady method
+    return false;
   }
 
   getQRCode() {
