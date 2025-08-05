@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WhatsApp QR Code - LIMS Service</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        .qr-container {
+            margin: 20px 0;
+            padding: 20px;
+            border: 2px dashed #ccc;
+            border-radius: 10px;
+            min-height: 300px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+        }
+        .qr-code {
+            font-family: 'Courier New', monospace;
+            font-size: 8px;
+            line-height: 8px;
+            white-space: pre;
+            background: white;
+            padding: 10px;
+            border: 1px solid #ddd;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        .status.connecting { background: #fff3cd; color: #856404; }
+        .status.connected { background: #d4edda; color: #155724; }
+        .status.authenticated { background: #d1ecf1; color: #0c5460; }
+        .status.error { background: #f8d7da; color: #721c24; }
+        button {
+            background: #25d366;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px;
+        }
+        button:hover { background: #128c7e; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+        .instructions {
+            text-align: left;
+            margin: 20px 0;
+            padding: 15px;
+            background: #e9ecef;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔗 WhatsApp Authentication</h1>
+        <p>Connect your phone to the LIMS WhatsApp Service</p>
+        
+        <div id="status" class="status connecting">Connecting to service...</div>
+        
+        <div class="qr-container" id="qrContainer">
+            <div id="qrPlaceholder">
+                <h3>📱 Waiting for QR Code...</h3>
+                <p>Click "Generate QR Code" to start</p>
+            </div>
+        </div>
+        
+        <button id="generateBtn" onclick="generateQR()">Generate QR Code</button>
+        <button id="refreshBtn" onclick="checkStatus()" disabled>Refresh Status</button>
+        
+        <div class="instructions">
+            <h3>📋 Instructions:</h3>
+            <ol>
+                <li>Click "Generate QR Code" above</li>
+                <li>Open WhatsApp on your phone</li>
+                <li>Tap the three dots menu → Linked devices</li>
+                <li>Tap "Link a device"</li>
+                <li>Scan the QR code displayed above</li>
+                <li>Wait for authentication to complete</li>
+            </ol>
+        </div>
+        
+        <div id="serviceInfo" style="margin-top: 20px; text-align: left; font-size: 12px; color: #666;"></div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        let isAuthenticated = false;
+        
+        // Status elements
+        const statusDiv = document.getElementById('status');
+        const qrContainer = document.getElementById('qrContainer');
+        const generateBtn = document.getElementById('generateBtn');
+        const refreshBtn = document.getElementById('refreshBtn');
+        const serviceInfo = document.getElementById('serviceInfo');
+        
+        // Socket connection events
+        socket.on('connect', () => {
+            updateStatus('connected', '✅ Connected to service');
+            refreshBtn.disabled = false;
+            checkStatus();
+        });
+        
+        socket.on('disconnect', () => {
+            updateStatus('error', '❌ Disconnected from service');
+            refreshBtn.disabled = true;
+        });
+        
+        // QR code event
+        socket.on('qr-code', (data) => {
+            console.log('QR code received:', data);
+            displayQRCode(data.qr);
+            updateStatus('connecting', '📱 QR Code ready - Scan with your phone');
+        });
+        
+        // WhatsApp status events
+        socket.on('whatsapp-status', (data) => {
+            console.log('WhatsApp status:', data);
+            if (data.isReady) {
+                updateStatus('authenticated', '🎉 WhatsApp authenticated and ready!');
+                isAuthenticated = true;
+                qrContainer.innerHTML = '<h2 style="color: green;">✅ Successfully Authenticated!</h2><p>Your phone is now connected to the LIMS WhatsApp Service</p>';
+                generateBtn.disabled = true;
+                generateBtn.textContent = 'Authenticated';
+            }
+        });
+        
+        // Functions
+        function updateStatus(type, message) {
+            statusDiv.className = `status ${type}`;
+            statusDiv.textContent = message;
+        }
+        
+        function displayQRCode(qrString) {
+            // Simple QR code display as text (for development)
+            qrContainer.innerHTML = `
+                <div class="qr-code">${qrString}</div>
+                <p style="margin-top: 10px; color: #666;">
+                    Scan this QR code with WhatsApp on your phone
+                </p>
+            `;
+        }
+        
+        async function generateQR() {
+            try {
+                generateBtn.disabled = true;
+                generateBtn.textContent = 'Generating...';
+                updateStatus('connecting', '🔄 Generating QR code...');
+                
+                const response = await fetch('/api/generate-qr', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                const result = await response.json();
+                console.log('Generate QR result:', result);
+                
+                if (result.success) {
+                    updateStatus('connecting', '⏳ QR code generation initiated...');
+                } else {
+                    updateStatus('error', `❌ Error: ${result.error}`);
+                    generateBtn.disabled = false;
+                    generateBtn.textContent = 'Generate QR Code';
+                }
+                
+            } catch (error) {
+                console.error('Generate QR error:', error);
+                updateStatus('error', `❌ Network error: ${error.message}`);
+                generateBtn.disabled = false;
+                generateBtn.textContent = 'Generate QR Code';
+            }
+        }
+        
+        async function checkStatus() {
+            try {
+                const response = await fetch('/api/whatsapp/service-info');
+                const info = await response.json();
+                
+                serviceInfo.innerHTML = `
+                    <strong>Service Info:</strong><br>
+                    Current Service: ${info.currentService || 'Unknown'}<br>
+                    Ready: ${info.isReady ? 'Yes' : 'No'}<br>
+                    Attempts: ${info.attempts || 0}/${info.maxAttempts || 0}
+                `;
+                
+                if (info.isReady) {
+                    updateStatus('authenticated', '🎉 WhatsApp is ready!');
+                    isAuthenticated = true;
+                    generateBtn.disabled = true;
+                    generateBtn.textContent = 'Authenticated';
+                } else {
+                    generateBtn.disabled = false;
+                    generateBtn.textContent = 'Generate QR Code';
+                }
+                
+            } catch (error) {
+                console.error('Status check error:', error);
+            }
+        }
+        
+        // Check status on page load
+        setTimeout(checkStatus, 1000);
+    </script>
+</body>
+</html>

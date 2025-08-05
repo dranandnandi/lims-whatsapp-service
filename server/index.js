@@ -37,8 +37,9 @@ app.use(cors({
 
 // Middleware
 app.use(express.json());
-// Fix: Remove this line as 'path' is not imported
-// app.use(express.static(path.join(__dirname, 'public')));
+
+// Serve static files from public directory
+app.use(express.static(join(__dirname, '..', 'public')));
 
 // Create uploads directory if it doesn't exist
 const uploadsDir = join(__dirname, 'uploads'); // Fix: use 'join' instead of 'path.join'
@@ -89,10 +90,16 @@ app.get('/', (req, res) => {
       generateQR: '/api/generate-qr',
       whatsappInfo: '/api/whatsapp/info',
       serviceInfo: '/api/whatsapp/service-info',
-      connection: '/api/whatsapp/connection'
+      connection: '/api/whatsapp/connection',
+      qrPage: '/qr.html'
     },
     documentation: 'https://github.com/dranandnandi/lims-whatsapp-service'
   });
+});
+
+// QR Code page route
+app.get('/qr', (req, res) => {
+  res.redirect('/qr.html');
 });
 
 app.get('/api/status', (req, res) => {
