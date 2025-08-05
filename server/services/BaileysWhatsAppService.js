@@ -2,6 +2,7 @@ import { makeWASocket, DisconnectReason, useMultiFileAuthState } from '@whiskeys
 import { Boom } from '@hapi/boom';
 import fs from 'fs';
 import path from 'path';
+import QRCode from 'qrcode';
 
 class BaileysWhatsAppService {
   constructor(io) {
@@ -99,7 +100,18 @@ class BaileysWhatsAppService {
         if (qr) {
           this.qrCode = qr;
           console.log('📱 QR Code generated for Baileys');
-          this.io.emit('qr-code', { qr, service: 'baileys' });
+          
+          // Generate QR code image server-side
+          this.generateQRImage(qr).then(qrImage => {
+            this.io.emit('qr-code', { 
+              qr, 
+              qrImage, 
+              service: 'baileys' 
+            });
+          }).catch(error => {
+            console.error('❌ Failed to generate QR image:', error);
+            this.io.emit('qr-code', { qr, service: 'baileys' });
+          });
         }
         
         if (connection === 'close') {
@@ -219,6 +231,28 @@ class BaileysWhatsAppService {
     }
   }
 
+  async generateQRImage(qrString) {
+    try {
+      // Generate QR code as base64 data URL
+      const qrImage = await QRCode.toDataURL(qrString, {
+        width: 256,
+        height: 256,
+        color: {
+          dark: '#000000',
+          light: '#FFFFFF'
+        },
+        margin: 2,
+        errorCorrectionLevel: 'M'
+      });
+      
+      console.log('✅ QR image generated successfully');
+      return qrImage;
+    } catch (error) {
+      console.error('❌ Failed to generate QR image:', error);
+      throw error;
+    }
+  }
+
   getQRCode() {
     return this.qrCode;
   }
@@ -235,22 +269,27 @@ class BaileysWhatsAppService {
         if (this.qrCode) {
           console.log('✅ QR code generated successfully');
           
+          // Generate QR image
+          const qrImage = await this.generateQRImage(this.qrCode);
+          
           // Emit QR to all connected clients
           if (this.io) {
             this.io.emit('qr-code', {
               qr: this.qrCode,
+              qrImage,
               service: 'baileys',
               timestamp: new Date().toISOString()
             });
           }
           
-          return { success: true, qr: this.qrCode };
+          return { success: true, qr: this.qrCode, qrImage };
         }
       }
       
       if (this.qrCode) {
         console.log('✅ Existing QR code available');
-        return { success: true, qr: this.qrCode };
+        const qrImage = await this.generateQRImage(this.qrCode);
+        return { success: true, qr: this.qrCode, qrImage };
       }
       
       throw new Error('No QR code available - service may already be authenticated');

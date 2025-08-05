@@ -108,44 +108,8 @@
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
-        // Load QRCode library with fallback
-        function loadQRCodeLibrary() {
-            return new Promise((resolve, reject) => {
-                const script = document.createElement('script');
-                script.src = 'https://unpkg.com/qrcode@1.5.3/build/qrcode.min.js';
-                script.onload = () => {
-                    console.log('✅ QRCode library loaded successfully');
-                    resolve();
-                };
-                script.onerror = () => {
-                    console.error('❌ Failed to load QRCode library from unpkg, trying jsdelivr...');
-                    const fallbackScript = document.createElement('script');
-                    fallbackScript.src = 'https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js';
-                    fallbackScript.onload = () => {
-                        console.log('✅ QRCode library loaded from fallback CDN');
-                        resolve();
-                    };
-                    fallbackScript.onerror = () => {
-                        console.error('❌ Failed to load QRCode library from both CDNs');
-                        reject(new Error('QRCode library failed to load'));
-                    };
-                    document.head.appendChild(fallbackScript);
-                };
-                document.head.appendChild(script);
-            });
-        }
-
-        // Initialize after DOM and QRCode library are ready
-        let qrCodeLibraryReady = false;
-        
-        document.addEventListener('DOMContentLoaded', async () => {
-            try {
-                await loadQRCodeLibrary();
-                qrCodeLibraryReady = true;
-            } catch (error) {
-                console.error('QRCode library loading failed:', error);
-                qrCodeLibraryReady = false;
-            }
+        // Initialize app after DOM is ready
+        document.addEventListener('DOMContentLoaded', () => {
             initializeApp();
         });
 
@@ -175,7 +139,7 @@
         // QR code event
         socket.on('qr-code', (data) => {
             console.log('QR code received:', data);
-            displayQRCode(data.qr);
+            displayQRCode(data.qr, data.qrImage);
             updateStatus('connecting', '📱 QR Code ready - Scan with your phone');
         });
         
@@ -197,8 +161,28 @@
             statusDiv.textContent = message;
         }
         
-        function displayQRCode(qrString) {
-            // Check if QRCode library is loaded
+        function displayQRCode(qrString, qrImage = null) {
+            // If we have a server-generated QR image, use it directly
+            if (qrImage) {
+                console.log('✅ Using server-generated QR image');
+                qrContainer.innerHTML = `
+                    <h3 style="color: #25D366; margin-bottom: 20px;">📱 Scan QR Code with WhatsApp</h3>
+                    <div style="background: white; padding: 20px; border-radius: 10px; display: inline-block; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
+                        <img src="${qrImage}" alt="WhatsApp QR Code" style="width: 256px; height: 256px; border: 2px solid #ddd; border-radius: 10px;">
+                    </div>
+                    <div style="margin-top: 15px;">
+                        <p style="color: #666; font-size: 14px;">
+                            1. Open WhatsApp on your phone<br>
+                            2. Tap <strong>⋮</strong> (three dots) → <strong>Linked devices</strong><br>
+                            3. Tap <strong>"Link a device"</strong><br>
+                            4. Scan this QR code
+                        </p>
+                    </div>
+                `;
+                return;
+            }
+
+            // Fallback: Check if QRCode library is loaded for client-side generation
             if (!qrCodeLibraryReady || typeof QRCode === 'undefined') {
                 console.error('QRCode library not loaded, falling back to text display');
                 qrContainer.innerHTML = `
@@ -219,65 +203,23 @@
                 return;
             }
 
-            // Convert QR string to visual QR code using QRCode.js library
-            // Use the global qrContainer variable instead of redeclaring it
-            
-            // Create canvas for QR code
-            const canvas = document.createElement('canvas');
-            canvas.id = 'qrCanvas';
-            canvas.style.margin = '20px auto';
-            canvas.style.display = 'block';
-            canvas.style.border = '2px solid #ddd';
-            canvas.style.borderRadius = '10px';
-            canvas.style.padding = '20px';
-            canvas.style.backgroundColor = 'white';
-            
-            // Clear container and add canvas
+            // Fallback: Display as text if no server image is available
+            console.warn('⚠️ No server-generated QR image, displaying as text');
             qrContainer.innerHTML = `
-                <h3 style="color: #25D366; margin-bottom: 20px;">📱 Scan QR Code with WhatsApp</h3>
-                <div style="background: white; padding: 20px; border-radius: 10px; display: inline-block;">
-                </div>
-                <div style="margin-top: 15px;">
-                    <p style="color: #666; font-size: 14px;">
+                <div style="color: orange; padding: 20px;">
+                    <h3>⚠️ Server QR Generation Issue</h3>
+                    <p>Displaying QR as text (server image generation failed)</p>
+                    <div style="background: white; color: black; padding: 15px; border-radius: 5px; font-family: monospace; font-size: 10px; word-break: break-all; margin: 10px 0;">
+                        ${qrString}
+                    </div>
+                    <p style="font-size: 12px;">
                         1. Open WhatsApp on your phone<br>
                         2. Tap <strong>⋮</strong> (three dots) → <strong>Linked devices</strong><br>
                         3. Tap <strong>"Link a device"</strong><br>
-                        4. Scan this QR code
+                        4. Copy the text above and try manual QR generation
                     </p>
                 </div>
             `;
-            
-            // Add canvas to the white container
-            const container = qrContainer.querySelector('div[style*="background: white"]');
-            container.appendChild(canvas);
-            
-            // Generate QR code on canvas
-            QRCode.toCanvas(canvas, qrString, {
-                width: 256,
-                height: 256,
-                color: {
-                    dark: '#000000',
-                    light: '#FFFFFF'
-                },
-                margin: 2,
-                errorCorrectionLevel: 'M'
-            }, function (error) {
-                if (error) {
-                    console.error('QR Code generation error:', error);
-                    qrContainer.innerHTML = `
-                        <div style="color: red; padding: 20px;">
-                            <h3>❌ QR Code Generation Failed</h3>
-                            <p>Error: ${error.message}</p>
-                            <details style="margin-top: 10px;">
-                                <summary>Raw QR Data (for debugging)</summary>
-                                <pre style="background: #f5f5f5; padding: 10px; border-radius: 5px; font-size: 10px; word-break: break-all;">${qrString}</pre>
-                            </details>
-                        </div>
-                    `;
-                } else {
-                    console.log('✅ QR Code generated successfully');
-                }
-            });
         }
         
         async function generateQR() {
