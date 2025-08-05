@@ -265,10 +265,17 @@ whatsappService.initialize();
 
 // Start server - Fixed PORT definition for Railway
 const PORT = process.env.PORT || 8080;
+const HOST = process.env.HOST || '0.0.0.0';
 
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 WhatsApp Service running on port ${PORT}`);
+server.listen(PORT, HOST, () => {
+  console.log(`🚀 WhatsApp Service running on ${HOST}:${PORT}`);
   console.log(`📱 Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`🌐 Server accessible at: 0.0.0.0:${PORT}`);
+  console.log(`🌐 Server accessible at: ${HOST}:${PORT}`);
   console.log(`🔗 Railway expects port: 8080`);
+  console.log(`🔧 Environment variables:`, {
+    NODE_ENV: process.env.NODE_ENV,
+    PORT: PORT,
+    HOST: HOST,
+    CORS_ORIGIN: process.env.CORS_ORIGIN
+  });
 });
