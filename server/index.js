@@ -263,11 +263,12 @@ io.on('connection', (socket) => {
 // Initialize WhatsApp service
 whatsappService.initialize();
 
-// Start server - Fixed PORT definition
-const PORT = process.env.PORT || 3001;
+// Start server - Fixed PORT definition for Railway
+const PORT = process.env.PORT || 8080;
 
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 WhatsApp Service running on port ${PORT}`);
   console.log(`📱 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🌐 Server accessible at: 0.0.0.0:${PORT}`);
+  console.log(`🔗 Railway expects port: 8080`);
 });
