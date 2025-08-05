@@ -74,6 +74,27 @@ const whatsappService = new HybridWhatsAppService(io);
 const messageService = new MessageService();
 
 // Routes
+// Homepage route
+app.get('/', (req, res) => {
+  res.json({
+    service: 'LIMS WhatsApp Service',
+    version: '1.0.0',
+    status: 'running',
+    endpoints: {
+      health: '/health',
+      status: '/api/status',
+      sendMessage: '/api/send-message',
+      sendReport: '/api/send-report',
+      messages: '/api/messages',
+      generateQR: '/api/generate-qr',
+      whatsappInfo: '/api/whatsapp/info',
+      serviceInfo: '/api/whatsapp/service-info',
+      connection: '/api/whatsapp/connection'
+    },
+    documentation: 'https://github.com/dranandnandi/lims-whatsapp-service'
+  });
+});
+
 app.get('/api/status', (req, res) => {
   res.json({
     status: 'online',
