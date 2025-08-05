@@ -7,8 +7,8 @@ class BaileysWhatsAppService {
   constructor(io) {
     this.io = io;
     this.sock = null;
-    this.isClientReady = false;
-    this.qrCodeData = null;
+    this.isReady = false;
+    this.qrCode = null;
     this.authDir = process.env.SESSION_PATH || './server/sessions/baileys-auth';
   }
 
@@ -29,29 +29,39 @@ class BaileysWhatsAppService {
       // Initialize authentication state
       const { state, saveCreds } = await useMultiFileAuthState(this.authDir);
 
-      // Create socket connection with safe logger
+      // Create a Pino-compatible logger that Baileys expects
+      const logger = {
+        level: 'error',
+        debug: () => {},
+        info: () => {},
+        warn: () => {},
+        error: (...args) => {
+          if (process.env.BAILEYS_LOG_LEVEL !== 'silent') {
+            console.error('[Baileys Error]', ...args);
+          }
+        },
+        fatal: (...args) => {
+          if (process.env.BAILEYS_LOG_LEVEL !== 'silent') {
+            console.error('[Baileys Fatal]', ...args);
+          }
+        },
+        child: () => logger, // Return self for child loggers
+        trace: () => {},
+        silent: () => {}
+      };
+
+      // Create socket connection with properly structured logger
       this.sock = makeWASocket({
         auth: state,
-        logger: {
-          level: 'error',
-          child: () => ({
-            level: 'error',
-            debug: () => {},
-            info: () => {},
-            warn: () => {},
-            error: (...args) => {
-              // Only log if not silenced
-              if (process.env.BAILEYS_LOG_LEVEL !== 'silent') {
-                console.error('[Baileys]', ...args);
-              }
-            },
-            fatal: (...args) => {
-              if (process.env.BAILEYS_LOG_LEVEL !== 'silent') {
-                console.error('[Baileys Fatal]', ...args);
-              }
-            }
-          })
-        }
+        logger: logger,
+        printQRInTerminal: false,
+        browser: ['LIMS WhatsApp Service', 'Chrome', '1.0.0'],
+        connectTimeoutMs: 60000,
+        defaultQueryTimeoutMs: 60000,
+        keepAliveIntervalMs: 30000,
+        syncFullHistory: false,
+        markOnlineOnConnect: false,
+        emitOwnEvents: false
       });
 
       // Set up event handlers
@@ -154,8 +164,8 @@ class BaileysWhatsAppService {
     }
 
     try {
-      const formattedNumber = phoneNumber.replace(/\D/g, '');
-      const jid = `${formattedNumber}@s.whatsapp.net`;
+      // Ensure the chatId is in the correct format
+      const jid = chatId.includes('@') ? chatId : `${chatId}@s.whatsapp.net`;
       
       const result = await this.sock.sendMessage(jid, { text: message });
       console.log('✅ Baileys message sent successfully');
@@ -235,7 +245,7 @@ class BaileysWhatsAppService {
       service: 'baileys',
       ready: this.isReady,
       hasQR: !!this.qrCode,
-      sessionPath: this.sessionPath
+      authDir: this.authDir
     };
   }
 }
