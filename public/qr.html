@@ -107,7 +107,7 @@
     </div>
 
     <script src="/socket.io/socket.io.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+    <script src="https://unpkg.com/qrcode@1.5.3/build/qrcode.min.js"></script>
     <script>
         const socket = io();
         let isAuthenticated = false;
@@ -157,6 +157,27 @@
         }
         
         function displayQRCode(qrString) {
+            // Check if QRCode library is loaded
+            if (typeof QRCode === 'undefined') {
+                console.error('QRCode library not loaded, falling back to text display');
+                qrContainer.innerHTML = `
+                    <div style="color: orange; padding: 20px;">
+                        <h3>⚠️ QR Library Loading Issue</h3>
+                        <p>Displaying QR as text (library failed to load)</p>
+                        <div style="background: white; color: black; padding: 15px; border-radius: 5px; font-family: monospace; font-size: 10px; word-break: break-all; margin: 10px 0;">
+                            ${qrString}
+                        </div>
+                        <p style="font-size: 12px;">
+                            1. Open WhatsApp on your phone<br>
+                            2. Tap <strong>⋮</strong> (three dots) → <strong>Linked devices</strong><br>
+                            3. Tap <strong>"Link a device"</strong><br>
+                            4. Copy the text above and try manual QR generation
+                        </p>
+                    </div>
+                `;
+                return;
+            }
+
             // Convert QR string to visual QR code using QRCode.js library
             const qrContainer = document.getElementById('qrContainer');
             
