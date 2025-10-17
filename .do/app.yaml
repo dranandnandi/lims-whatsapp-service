@@ -1,0 +1,25 @@
+name: bailey-whatsapp-web
+region: fra
+services:
+  - build_command: npm ci
+    environment_slug: node-js
+    github:
+      branch: main
+      deploy_on_push: true
+      repo: anprohealthtech-lab/bailey-whatsapp-web
+    http_port: 8080
+    instance_count: 1
+    instance_size_slug: basic-xxs
+    name: whatsapp-api
+    run_command: npm start
+    source_dir: /
+envs:
+  - key: NODE_ENV
+    value: production
+  - key: PORT
+    value: "8080"
+  - key: HOST
+    value: 0.0.0.0
+alerts:
+  - rule: DEPLOYMENT_FAILED
+  - rule: DOMAIN_FAILED
