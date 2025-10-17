@@ -108,14 +108,18 @@
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
+        // Global variables
+        let socket;
+        let isAuthenticated = false;
+        let statusDiv, qrContainer, generateBtn, refreshBtn, serviceInfoDiv;
+        
         // Initialize app after DOM is ready
         document.addEventListener('DOMContentLoaded', () => {
             initializeApp();
         });
 
         function initializeApp() {
-        const socket = io();
-        let isAuthenticated = false;
+        socket = io();
         
         // Status elements
         const statusDiv = document.getElementById('status');
@@ -228,7 +232,7 @@
                 generateBtn.textContent = 'Generating...';
                 updateStatus('connecting', '🔄 Generating QR code...');
                 
-                const response = await fetch('/api/generate-qr', {
+                const response = await fetch('./api/generate-qr', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' }
                 });
@@ -254,7 +258,7 @@
         
         async function checkStatus() {
             try {
-                const response = await fetch('/api/whatsapp/service-info');
+                const response = await fetch('./api/whatsapp/service-info');
                 const info = await response.json();
                 
                 serviceInfo.innerHTML = `
