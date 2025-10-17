@@ -88,8 +88,8 @@
             </div>
         </div>
         
-        <button id="generateBtn" onclick="generateQR()">Generate QR Code</button>
-        <button id="refreshBtn" onclick="checkStatus()" disabled>Refresh Status</button>
+        <button id="generateBtn" onclick="window.generateQRCode()">Generate QR Code</button>
+        <button id="refreshBtn" onclick="window.checkServiceStatus()" disabled>Refresh Status</button>
         
         <div class="instructions">
             <h3>📋 Instructions:</h3>
@@ -112,6 +112,76 @@
         let socket;
         let isAuthenticated = false;
         let statusDiv, qrContainer, generateBtn, refreshBtn, serviceInfoDiv;
+        
+        // Global functions for button handlers
+        async function generateQRCode() {
+            try {
+                const generateBtn = document.getElementById('generateBtn');
+                const statusDiv = document.getElementById('status');
+                
+                generateBtn.disabled = true;
+                generateBtn.textContent = 'Generating...';
+                updateStatus('connecting', '🔄 Generating QR code...');
+                
+                const response = await fetch('./api/generate-qr', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                const result = await response.json();
+                console.log('Generate QR result:', result);
+                
+                if (result.success) {
+                    updateStatus('connecting', '⏳ QR code generation initiated...');
+                } else {
+                    updateStatus('error', `❌ Error: ${result.error}`);
+                    generateBtn.disabled = false;
+                    generateBtn.textContent = 'Generate QR Code';
+                }
+                
+            } catch (error) {
+                console.error('Generate QR error:', error);
+                updateStatus('error', `❌ Network error: ${error.message}`);
+                const generateBtn = document.getElementById('generateBtn');
+                generateBtn.disabled = false;
+                generateBtn.textContent = 'Generate QR Code';
+            }
+        }
+        
+        async function checkServiceStatus() {
+            try {
+                const response = await fetch('./api/whatsapp/service-info');
+                const info = await response.json();
+                console.log('Service info:', info);
+                
+                const generateBtn = document.getElementById('generateBtn');
+                
+                if (info.isReady) {
+                    updateStatus('authenticated', '🎉 WhatsApp is ready!');
+                    isAuthenticated = true;
+                    generateBtn.disabled = true;
+                    generateBtn.textContent = 'Authenticated';
+                } else {
+                    generateBtn.disabled = false;
+                    generateBtn.textContent = 'Generate QR Code';
+                }
+                
+            } catch (error) {
+                console.error('Status check error:', error);
+            }
+        }
+        
+        function updateStatus(type, message) {
+            const statusDiv = document.getElementById('status');
+            if (statusDiv) {
+                statusDiv.className = `status ${type}`;
+                statusDiv.textContent = message;
+            }
+        }
+        
+        // Make functions globally accessible
+        window.generateQRCode = generateQRCode;
+        window.checkServiceStatus = checkServiceStatus;
         
         // Initialize app after DOM is ready
         document.addEventListener('DOMContentLoaded', () => {
@@ -226,69 +296,13 @@
             `;
         }
         
-        async function generateQR() {
-            try {
-                generateBtn.disabled = true;
-                generateBtn.textContent = 'Generating...';
-                updateStatus('connecting', '🔄 Generating QR code...');
-                
-                const response = await fetch('./api/generate-qr', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' }
-                });
-                
-                const result = await response.json();
-                console.log('Generate QR result:', result);
-                
-                if (result.success) {
-                    updateStatus('connecting', '⏳ QR code generation initiated...');
-                } else {
-                    updateStatus('error', `❌ Error: ${result.error}`);
-                    generateBtn.disabled = false;
-                    generateBtn.textContent = 'Generate QR Code';
-                }
-                
-            } catch (error) {
-                console.error('Generate QR error:', error);
-                updateStatus('error', `❌ Network error: ${error.message}`);
-                generateBtn.disabled = false;
-                generateBtn.textContent = 'Generate QR Code';
-            }
-        }
-        
-        async function checkStatus() {
-            try {
-                const response = await fetch('./api/whatsapp/service-info');
-                const info = await response.json();
-                
-                serviceInfo.innerHTML = `
-                    <strong>Service Info:</strong><br>
-                    Current Service: ${info.currentService || 'Unknown'}<br>
-                    Ready: ${info.isReady ? 'Yes' : 'No'}<br>
-                    Attempts: ${info.attempts || 0}/${info.maxAttempts || 0}
-                `;
-                
-                if (info.isReady) {
-                    updateStatus('authenticated', '🎉 WhatsApp is ready!');
-                    isAuthenticated = true;
-                    generateBtn.disabled = true;
-                    generateBtn.textContent = 'Authenticated';
-                } else {
-                    generateBtn.disabled = false;
-                    generateBtn.textContent = 'Generate QR Code';
-                }
-                
-            } catch (error) {
-                console.error('Status check error:', error);
-            }
-        }
         
         // Check status on page load
-        setTimeout(checkStatus, 1000);
+        setTimeout(checkServiceStatus, 1000);
         
         // Make functions globally accessible for onclick handlers
-        window.generateQR = generateQR;
-        window.checkStatus = checkStatus;
+        window.generateQRCode = generateQRCode;
+        window.checkServiceStatus = checkServiceStatus;
         }
     </script>
 </body>
